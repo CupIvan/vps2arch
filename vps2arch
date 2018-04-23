@@ -13,6 +13,8 @@
 # GNU General Public License at <http://www.gnu.org/licenses/> for
 # more details.
 
+ISO_DATE="2014.03.01"
+
 set -e
 
 # Gathering informations about actual environment.
@@ -25,29 +27,23 @@ else
 	exit 2
 fi
 
-get_worldwide_mirrors() {
-	_download 'https://www.archlinux.org/mirrorlist/?country=all&protocol=http&protocol=https&ip_version=4' | awk '/^## /{if ($2 == "Worldwide") { flag=1 } else { flag=0 } } /^#Server/ { if (flag) { sub(/\/\$repo.*/, ""); print $3 } }'
-}
-
 cpu_type=$(uname -m)
 
 is_openvz() { [ -d /proc/vz -a ! -d /proc/bc ]; }
 is_lxc() { grep -aqw container=lxc /proc/1/environ ; }
 
 download() {
-	local path="$1" x=
-	shift
-	for x in $mirrors; do
-		_download "$x/$path" && return 0
-	done
+	local path="$1"
+	_download "https://archive.archlinux.org/$path" && return 0
 	return 1
 }
 
 download_and_extract_bootstrap() {
 	local sha1 filename
-	download iso/latest/sha1sums.txt | fgrep "$cpu_type.tar.gz" > "sha1sums.txt"
+
+	download "iso/$ISO_DATE/sha1sums.txt" | fgrep "$cpu_type.tar.gz" > "sha1sums.txt"
 	read -r sha1 filename < "sha1sums.txt"
-	download "iso/latest/$filename" > "$filename"
+	download "iso/$ISO_DATE/$filename" > "$filename"
 	sha1sum -c sha1sums.txt || exit 1
 	tar -xpzf "$filename"
 	rm -f "$filename"
@@ -288,9 +284,6 @@ while getopts ":b:m:n:h" opt; do
 		fi
 		bootloader="$OPTARG"
 		;;
-	m)
-		mirrors="${mirrors:+$mirrors }$OPTARG"
-		;;
 	n)
 		if ! [ "$OPTARG" = "systemd-networkd" -o "$OPTARG" = "netctl" -o "$OPTARG" = "none" ]; then
 			echo "Invalid networking configuration system specified" >&2
@@ -305,7 +298,6 @@ while getopts ":b:m:n:h" opt; do
 			  Options:
 			    -b (grub|syslinux)           Use the specified bootloader. When this option is omitted, it defaults to grub.
 			    -n (systemd-networkd|netctl) Use the specified networking configuration system. When this option is omitted, it defaults to systemd-networkd.
-			    -m mirror                    Use the provided mirror (you can specify this option more than once).
 
 			    -h                           Print this help message
 
@@ -325,9 +317,6 @@ while getopts ":b:m:n:h" opt; do
 	esac
 done
 shift $((OPTIND - 1))
-
-[ -z "$mirrors" ] && mirrors=$(get_worldwide_mirrors)
-
 
 if is_openvz; then
 	bootloader=none
